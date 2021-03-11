@@ -1,0 +1,2 @@
+# FloatingEdgeRegulator
+Regulator pływającej krawędzi
