@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<Project>
+  <NodeExplorer Name="Motion Manager" Active="1">
+    <CAN Name="CAN" Active="1">
+      <Ixxatvci3 Name="Ixxat_vci3" DispName="Ixxat VCI3" Active="1">
+        <CAN10 Name="CAN1-0" DispName="CAN1" Active="1" PortNo="1" Channel="0" Baudrate="20000" ScanStart="5" ScanEnd="5">
+          <COCAN Name="CO_CAN" DispName="CO_CAN" Active="1">
+            <MCDC3006SCF Name="MCDC3006S-CF" DispName="MCDC3006S-CF" Active="1" NodeNumber="5" SerialNumber="31400222" Family="0"/>
+          </COCAN>
+        </CAN10>
+      </Ixxatvci3>
+    </CAN>
+  </NodeExplorer>
+  <DeviceSettings Name="DeviceSettings">
+    <N31400222 Name="31400222"/>
+  </DeviceSettings>
+</Project>
