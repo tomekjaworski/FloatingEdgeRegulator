@@ -9,7 +9,7 @@ class Object(object):
 config = Object()
 config.fps = 60
 config.exposure_time = 100
-config.threshold_value = 80
+config.threshold_value = 60
 config.kernel_size = 10
 config.blob_size_range = [3000, 5000]
 
@@ -19,16 +19,20 @@ config.setup_marker_detection = True
 config.setup_dump_video = False
 
 ############################################################################
-cap = cv2.VideoCapture(0)
-_, _ = cap.read()
 
 output = subprocess.call(f"v4l2-ctl -d 0 -c auto_exposure=1 -c exposure_time_absolute={config.exposure_time}",
                          shell=True)
 print(f"output=[{output}]")
 output = subprocess.call(f"v4l2-ctl -d 0 -p {config.fps}", shell=True)
 print(f"output=[{output}]")
+time.sleep(2)
+
+# Otwórz urzadzenie i wykonaj probny odczyt
+cap = cv2.VideoCapture(0)
+_, _ = cap.read()
 time.sleep(1)
 
+# Wyswietl pierwsza ramke (debug)
 _, frame = cap.read()
 cv2.imshow('frame', frame)
 
@@ -76,7 +80,7 @@ while not terminate:
             frame[:, max_col - 1] = 0
 
     if ret:
-        ##cv2.imshow('frame', frame)
+        cv2.imshow('frame', frame)
         key = cv2.waitKey(1)
     else:
         print("Błąd pobierania ramki video")
