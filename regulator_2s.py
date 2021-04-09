@@ -121,7 +121,7 @@ while (True):
         frame[:, max_col - 1] = 0
 
         mid_point = (min_col + max_col) // 2
-        pos = (mid_point - 320.0) / 320.0
+        pos = 147.0 * (mid_point - 320.0) / 320.0 # pozycja srodka znacznika w milimetrach
 
         print(f"FOUND {blob.bbox_area}, counter={found_counter}; maxc={mid_point}, pos={pos}")
 
@@ -133,7 +133,7 @@ while (True):
 
             # pozycja=0 - do okna
             # pozycja=400,000 do drzwi
-            if pos < -0.1:
+            if pos < 7 - 2:
                 FH.GoToPosition(can0, 5, KIERUNEK_DRZWI)
                 print(f"#REG: {KIERUNEK_DRZWI}")
                 output_value = KIERUNEK_DRZWI
