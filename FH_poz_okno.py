@@ -1,11 +1,8 @@
 #!/bin/python3.7
 #
-import sys
-import can #pip3 install python-candd
 import time
-import random
-import Faulhaber as FH
 
+import Faulhaber as FH
 
 can0 = FH.Initialize()
 node_id = 5
