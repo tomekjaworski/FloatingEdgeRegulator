@@ -88,6 +88,10 @@ ident.marker_occurrence_timestamp = time.time()
 swap_directions = False
 last_swap_timestamp = time.time()
 
+Xposition_prev = 0
+Xposition = 0
+Xvelocities = [0] * 5
+
 while True:
     # capture the frame
     ret, frame = cap.read()
@@ -103,7 +107,7 @@ while True:
     delta = now - fps_time
     if delta > 1:
         fps = fps_counter / delta
-        print(f"FPS={fps}")
+        #print(f"FPS={fps}")
         fps_counter = 0
         fps_time = now
         cv2.imshow('frame', frame)
@@ -134,19 +138,23 @@ while True:
         frame[:, min_col - 1] = 0
         frame[:, max_col - 1] = 0
 
-        mid_point = (min_col + max_col) // 2
+        Xposition = (min_col + max_col) // 2
         #pos = 147.0 * (mid_point - 320.0) / 320.0 # pozycja srodka znacznika w milimetrach
 
         output_value = -1
         if now - last_output_update > config.Tdetection:
+
+            Xvelocity = (Xposition - Xposition_prev) / (ident.marker_occurrence_timestamp - now)
+            Xvelocities = Xvelocities[1:] + [Xvelocity]
+
             ident.marker_occurrence_timestamp = now
             last_output_update = now
             cv2.imshow('found', frame)
 
-            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {mid_point} {ident.Wmin} {ident.Wmax} {ident.Wcurrent}\n")
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition} {ident.Wmin} {ident.Wmax} {ident.Wcurrent}\n")
             log_file.flush()
 
-        print(f"FOUND {blob.bbox_area}, found={found_counter}; edge={ident.edge_counter}; X={mid_point} W={ident.Wcurrent}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; edge={ident.edge_counter}; X={Xposition} W={ident.Wcurrent}; Xvelocities={Xvelocities}")
         break
 
     if now - ident.marker_occurrence_timestamp > ident.Tturn:
