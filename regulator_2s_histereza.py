@@ -3,7 +3,7 @@ import cv2
 import skimage.measure
 import subprocess, time
 import Faulhaber as FH
-import datetime
+import datetime, os, math
 
 class Object(object):
     pass
@@ -208,6 +208,17 @@ while True:
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
+
+        if key == ord('o'): # okno
+            FH.GoToPosition(can0, 5, 0)
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {math.inf} {Xvelocities}\n")
+            log_file.flush()
+
+        if key == ord('d'): # drzwi
+            FH.GoToPosition(can0, 5, 400_000)
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {math.inf} {Xvelocities}\n")
+            log_file.flush()
+
         if key == ord('s'):
             fname = f"frame_{frame_counter}.png"
             cv2.imwrite(fname, org_frame)
