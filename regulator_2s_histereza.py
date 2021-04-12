@@ -47,7 +47,7 @@ config.fps = 60             # prędkość akwizycji kamery
 config.exposure_time = 100  # czas ekspozycji kamery w [us]
 config.threshold_value = 60
 config.kernel_size = 10
-config.blob_size_range = [2000, 6000]
+config.blob_size_range = [2000, 7000]
 config.Tdetection = 10 # wykrywaj znaczniki w obrazie nie częściej niż Tdetection sekund
 
 #############################

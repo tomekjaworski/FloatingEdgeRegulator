@@ -11,7 +11,7 @@ config.fps = 60
 config.exposure_time = 100
 config.threshold_value = 60
 config.kernel_size = 10
-config.blob_size_range = [2000, 6000]
+config.blob_size_range = [2000, 7000]
 
 config.setup_threshold = True
 config.setup_blob_detection = True
