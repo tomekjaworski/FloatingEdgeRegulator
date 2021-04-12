@@ -82,7 +82,9 @@ frame_counter = 0
 CONFIG_imshow = False
 last_output_update = time.time()
 timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-log_file = open(f"data-{timestamp}.txt", "wt")
+
+os.makedirs("measurements", exist_ok=True)
+log_file = open(f"measurements/data-{timestamp}.txt", "wt")
 
 marker_last_occurrence_timestamp = time.time()
 swap_directions = False
