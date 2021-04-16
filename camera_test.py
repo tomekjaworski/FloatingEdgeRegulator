@@ -12,6 +12,7 @@ config.exposure_time = 100
 config.threshold_value = 60
 config.kernel_size = 10
 config.blob_size_range = [2000, 7000]
+config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 
 config.setup_threshold = True
 config.setup_blob_detection = True
@@ -46,6 +47,10 @@ else:
 ####################
 
 terminate = False
+Xposition_px = 0
+marker_width = -1
+marker_px_per_mm = -1
+
 
 print("Wciśnij 'q' aby przerwać...")
 while not terminate:
@@ -76,11 +81,25 @@ while not terminate:
                 continue  # to nie jest nasz blob
 
             min_row, min_col, max_row, max_col = blob.bbox
+            frame[:, 320] = 255 - frame[:, 320]
+            frame[240, :] = 255 - frame[240, :]
+
             frame[:, min_col - 1] = 0
             frame[:, max_col - 1] = 0
 
+
+            Xposition_px = (min_col + max_col) / 2
+            Xposition_px = Xposition_px - 320  # punkt środkowy
+
+            marker_width = max_col - min_col + 1
+            marker_px_per_mm = marker_width / config.marker_size_mm
+
+            Xposition_mm = Xposition_px * (config.marker_size_mm / marker_width)
+
     if ret:
+        title = f"marker_width={marker_width}px; width_ratio={marker_px_per_mm:.2f}px/mm; Xpos={Xposition_px:.0f}px,{Xposition_mm:.0f}mm"
         cv2.imshow('frame', frame)
+        cv2.setWindowTitle('frame', title)
         key = cv2.waitKey(1)
     else:
         print("Błąd pobierania ramki video")

@@ -45,11 +45,14 @@ FH.WaitForTargetPosition(can0, 5)
 config = Object()
 config.fps = 60             # prędkość akwizycji kamery
 config.exposure_time = 100  # czas ekspozycji kamery w [us]
-config.threshold_value = 60
 config.kernel_size = 10
-config.blob_size_range = [2000, 7000]
 config.Tdetection = 10 # wykrywaj znaczniki w obrazie nie częściej niż Tdetection sekund
+config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 
+# %% Kalibrajca:
+config.threshold_value = 60
+config.blob_size_range = [2000, 7000]
+config.marker_size_px = 61 # Szerokość markera w pikselach
 #############################
 
 
@@ -85,14 +88,16 @@ timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 os.makedirs("measurements", exist_ok=True)
 log_file = open(f"measurements/data-{timestamp}.txt", "wt")
+log_file_first_row = True
 
 marker_last_occurrence_timestamp = time.time()
 swap_directions = False
 last_swap_timestamp = time.time()
+#config.
 
-Xposition_prev = 0
-Xposition = 0
-Xvelocities = [0] * 5
+Xposition_mm_prev = 0
+Xposition_px = 0
+Xvelocities_mm = [0] * 5
 
 while True:
     # capture the frame
@@ -140,15 +145,17 @@ while True:
         frame[:, min_col - 1] = 0
         frame[:, max_col - 1] = 0
 
-        Xposition = (min_col + max_col) // 2
-        #pos = 147.0 * (mid_point - 320.0) / 320.0 # pozycja srodka znacznika w milimetrach
-        Xposition = Xposition - 320 # punkt środkowy
+        Xposition_px = (min_col + max_col) / 2
+        Xposition_px = Xposition_px - 320 # punkt środkowy
+        Xposition_mm = Xposition_px * (config.marker_size_mm / config.marker_size_px)
 
         output_value = -1
         if now - last_output_update > config.Tdetection:
 
-            Xvelocity = (Xposition - Xposition_prev) / (marker_last_occurrence_timestamp - now)
-            Xvelocities = Xvelocities[1:] + [Xvelocity]
+            time_delta = now - marker_last_occurrence_timestamp # czas w sekundach
+            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) / time_delta
+            Xvelocities_mm = Xvelocities_mm[1:] + [Xvelocity_mm]
+            Xposition_mm_prev = Xposition_mm
 
             marker_last_occurrence_timestamp = now
             last_output_update = now
@@ -157,11 +164,11 @@ while True:
             ## ------ regulacja -------
             # pozycja=0 - do okna
             # pozycja=400,000 do drzwi
-            if Xposition > 0: # marker przesuwa się do DRZWI
+            if Xposition_px > 0: # marker przesuwa się do DRZWI
                 FH.GoToPosition(can0, 5, 0)
 
                 pass
-            if Xposition <= 0: # marker przesuwa się do OKNA
+            if Xposition_px <= 0: # marker przesuwa się do OKNA
                 FH.GoToPosition(can0, 5, 240_000)
                 pass
 
@@ -179,10 +186,13 @@ while True:
 
             ## ------------------------
 
-            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition} {Xvelocities}\n")
+            if log_file_first_row:
+                log_file_first_row = False
+                log_file.write("timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec]\n")
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm}\n")
             log_file.flush()
 
-            print(f"FOUND {blob.bbox_area}, found={found_counter}; X={Xposition}; Xvelocities={Xvelocities}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvelocities={Xvelocities_mm}")
         break
 
     # if now - ident.marker_occurrence_timestamp > ident.Tturn:
@@ -211,12 +221,12 @@ while True:
 
         if key == ord('o'): # okno
             FH.GoToPosition(can0, 5, 0)
-            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {math.inf} {Xvelocities}\n")
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {math.inf} {Xvelocities_mm}\n")
             log_file.flush()
 
         if key == ord('d'): # drzwi
             FH.GoToPosition(can0, 5, 400_000)
-            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {math.inf} {Xvelocities}\n")
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {math.inf} {Xvelocities_mm}\n")
             log_file.flush()
 
         if key == ord('s'):
