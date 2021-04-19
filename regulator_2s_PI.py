@@ -34,7 +34,7 @@ time.sleep(1)
 FH.FindHomePosition(can0, 5)
 print("POS:", FH.GetCurrentPosition(can0, 5))
 
-FH.GoToPosition(can0, 5, 400_000)
+FH.GoToPosition(can0, 5, 120_000) # taśma mnie więcej w miejscu
 FH.WaitForTargetPosition(can0, 5)
 
 
@@ -52,9 +52,21 @@ config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 # %% Kalibrajca:
 config.threshold_value = 60
 config.blob_size_range = [2000, 7000]
-config.marker_size_px = 61 # Szerokość markera w pikselach
+config.marker_size_px = 67 # Szerokość markera w pikselach
 #############################
 
+pid = Object()
+pid.Kp = 5000
+pid.Ti = 1000
+pid.Td = 0
+
+pid.error_current = 0 # uchyb aktualny [mm]
+pid.error_previous = 0 # uchyb poprzedni [mm]
+pid.time_delta = 0 # długośc okresu regulacji/obrotu taśmy [s]
+pid.integral_accumulator = 0 # akumulator całki [mm]
+pid.output_limit = [0, 400_000] # ogranicznik wyjścia
+pid.output = 0
+#############################
 
 # set the ROI parameters
 # left = 0
@@ -84,16 +96,16 @@ frame_counter = 0
 
 CONFIG_imshow = False
 last_output_update = time.time()
-timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+log_file_timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 os.makedirs("measurements", exist_ok=True)
-log_file = open(f"measurements/data-{timestamp}.txt", "wt")
+log_file = open(f"measurements/data-{log_file_timestamp}.txt", "wt")
 log_file_first_row = True
 
 marker_last_occurrence_timestamp = time.time()
 swap_directions = False
 last_swap_timestamp = time.time()
-#config.
+
 
 Xposition_mm_prev = 0
 Xposition_px = 0
@@ -152,8 +164,8 @@ while True:
         output_value = -1
         if now - last_output_update > config.Tdetection:
 
-            time_delta = now - marker_last_occurrence_timestamp # czas w sekundach
-            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) / time_delta
+            pid.time_delta = now - marker_last_occurrence_timestamp # czas w sekundach
+            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) / pid.time_delta
             Xvelocities_mm = Xvelocities_mm[1:] + [Xvelocity_mm]
             Xposition_mm_prev = Xposition_mm
 
@@ -161,6 +173,22 @@ while True:
             last_output_update = now
             cv2.imshow('found', frame)
 
+            ## ------ regulacja -------
+            pid.error_current = 0 - Xposition_mm
+
+            pid.integral_accumulator = pid.integral_accumulator + pid.error_current / pid.time_delta
+
+            # Wyznaczanie wyjścia
+            output = pid.Kp * pid.error_current
+            output = output + pid.Ti * pid.integral_accumulator
+            output = output + 120_000
+            output = max(min(output, pid.output_limit[1]), pid.output_limit[0])
+
+            pid.error_previous = pid.error_current
+            pid.output = int(output)
+            FH.GoToPosition(can0, 5, pid.output)
+
+            """
             ## ------ regulacja -------
             # pozycja=0 - do okna
             # pozycja=400,000 do drzwi
@@ -171,8 +199,8 @@ while True:
             if Xposition_px <= 0: # marker przesuwa się do OKNA
                 FH.GoToPosition(can0, 5, 240_000)
                 pass
-
-                """
+            """
+            """
     
             if pos < 7 - 2:
                 FH.GoToPosition(can0, 5, KIERUNEK_DRZWI)
@@ -182,17 +210,20 @@ while True:
                 FH.GoToPosition(can0, 5, KIERUNEK_OKNO)
                 print(f"#REG: {KIERUNEK_OKNO}")
                 output_value = KIERUNEK_OKNO
-                """
+            """
 
             ## ------------------------
 
             if log_file_first_row:
                 log_file_first_row = False
-                log_file.write("timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec]\n")
-            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm}\n")
+                log_file.write(f"# Znacznik czasu: {log_file_timestamp}\n")
+                log_file.write(f"# Źródło: {__file__}\n")
+                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum\n")
+            log_file_row = f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {pid.time_delta} {pid.output} {pid.integral_accumulator}\n"
+            log_file.write(log_file_row)
             log_file.flush()
 
-            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvelocities={Xvelocities_mm}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={pid.output}; r.acc={pid.integral_accumulator:.2f}")
         break
 
     # if now - ident.marker_occurrence_timestamp > ident.Tturn:
