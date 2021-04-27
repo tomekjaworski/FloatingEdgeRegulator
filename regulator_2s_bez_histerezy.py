@@ -51,8 +51,8 @@ config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 
 # %% Kalibrajca:
 config.threshold_value = 60
-config.blob_size_range = [2000, 7000]
-config.marker_size_px = 61 # Szerokość markera w pikselach
+config.blob_size_range = [2000, 8000]
+config.marker_size_px = 74 # Szerokość markera w pikselach
 #############################
 
 
@@ -164,35 +164,27 @@ while True:
             ## ------ regulacja -------
             # pozycja=0 - do okna
             # pozycja=400,000 do drzwi
+            driver_position = -1
             if Xposition_px > 0: # marker przesuwa się do DRZWI
-                FH.GoToPosition(can0, 5, 0)
+                driver_position = 0
 
                 pass
             if Xposition_px <= 0: # marker przesuwa się do OKNA
-                FH.GoToPosition(can0, 5, 240_000)
+                driver_position = 240_000
                 pass
 
-                """
-    
-            if pos < 7 - 2:
-                FH.GoToPosition(can0, 5, KIERUNEK_DRZWI)
-                print(f"#REG: {KIERUNEK_DRZWI}")
-                output_value = KIERUNEK_DRZWI
-            if pos > 0.1:
-                FH.GoToPosition(can0, 5, KIERUNEK_OKNO)
-                print(f"#REG: {KIERUNEK_OKNO}")
-                output_value = KIERUNEK_OKNO
-                """
+            if driver_position is not None:
+                FH.GoToPosition(can0, 5, driver_position)
 
             ## ------------------------
 
             if log_file_first_row:
                 log_file_first_row = False
-                log_file.write("timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec]\n")
-            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm}\n")
+                log_file.write("timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] output[1]\n")
+            log_file.write(f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {driver_position}\n")
             log_file.flush()
 
-            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvelocities={Xvelocities_mm}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvelocities={Xvelocities_mm}; Out= {driver_position}")
         break
 
     # if now - ident.marker_occurrence_timestamp > ident.Tturn:
