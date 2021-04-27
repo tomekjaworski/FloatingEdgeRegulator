@@ -11,7 +11,7 @@ config.fps = 60
 config.exposure_time = 100
 config.threshold_value = 60
 config.kernel_size = 10
-config.blob_size_range = [2000, 7000]
+config.blob_size_range = [2000, 8000]
 config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 
 config.setup_threshold = True
@@ -48,6 +48,7 @@ else:
 
 terminate = False
 Xposition_px = 0
+Xposition_mm = 0
 marker_width = -1
 marker_px_per_mm = -1
 
