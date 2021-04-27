@@ -56,10 +56,11 @@ config.marker_size_px = 67 # Szerokość markera w pikselach
 #############################
 
 pid = Object()
-pid.Kp = 5000
-pid.Ti = 1000
+pid.Kp = 6000
+pid.Ti = 70
 pid.Td = 0
 
+pid.set_point = 0
 pid.error_current = 0 # uchyb aktualny [mm]
 pid.error_previous = 0 # uchyb poprzedni [mm]
 pid.time_delta = 0 # długośc okresu regulacji/obrotu taśmy [s]
@@ -174,9 +175,9 @@ while True:
             cv2.imshow('found', frame)
 
             ## ------ regulacja -------
-            pid.error_current = 0 - Xposition_mm
+            pid.error_current = pid.set_point - Xposition_mm
 
-            pid.integral_accumulator = pid.integral_accumulator + pid.error_current / pid.time_delta
+            pid.integral_accumulator = pid.integral_accumulator + pid.time_delta * (pid.error_current + pid.error_previous) / 2.0
 
             # Wyznaczanie wyjścia
             output = pid.Kp * pid.error_current
@@ -218,12 +219,12 @@ while True:
                 log_file_first_row = False
                 log_file.write(f"# Znacznik czasu: {log_file_timestamp}\n")
                 log_file.write(f"# Źródło: {__file__}\n")
-                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum\n")
-            log_file_row = f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {pid.time_delta} {pid.output} {pid.integral_accumulator}\n"
+                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm]\n")
+            log_file_row = f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {pid.time_delta} {pid.output} {pid.integral_accumulator} {pid.set_point}\n"
             log_file.write(log_file_row)
             log_file.flush()
 
-            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={pid.output}; r.acc={pid.integral_accumulator:.2f}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={pid.output}; r.acc={pid.integral_accumulator:.2f}; r.sp={pid.set_point}")
         break
 
     # if now - ident.marker_occurrence_timestamp > ident.Tturn:
@@ -264,6 +265,13 @@ while True:
             fname = f"frame_{frame_counter}.png"
             cv2.imwrite(fname, org_frame)
             print(f"Zapisano: {fname}")
+
+
+        if key==ord('z'):
+            pid.set_point = 0
+        if key==ord('+'):
+            pid.set_point = 20
+
 
 print("Koniec pracy")
 log_file.close()
