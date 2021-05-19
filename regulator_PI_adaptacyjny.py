@@ -14,12 +14,17 @@ class PIDSettings:
     Ki: float = 0
     Kd: float = 0
     OutputOffset: float = 0
+    A: float = 0
+    B: float = 0
 
-    def __init__(self, kp: float, ki: float, kd: float, offset: float):
+    def __init__(self, kp: float, ki: float, kd: float, offset: float, a: float, b: float):
         self.Kp = kp
         self.Ki = ki
         self.Kd = kd
         self.OutputOffset = offset
+
+        self.A = a
+        self.B = b
 
 
 class MeasurementQueue:
@@ -39,8 +44,9 @@ class MeasurementQueue:
 
     def AddMeasurement(self, newMarkerPosition: float, newCarriagePosition: float, newTimestamp: float):
         E = self.__capacity - 1
-        if newMarkerPosition == self.__marker_positions[E]:
+        if newCarriagePosition == self.__carriage_positions[E] or newMarkerPosition == self.__marker_positions[E]:
             self.__carriage_positions[E] = newCarriagePosition
+            self.__marker_positions[E] = newMarkerPosition
             self.__timestamps[E] = newTimestamp
         else:
             for i in range(0, self.__capacity - 1):
@@ -68,26 +74,29 @@ class MeasurementQueue:
             vmarker0 = (self.__marker_positions[E - 0] - self.__marker_positions[E - 1]) / dt0 # ostatnia prędkość markera
             vmarker1 = (self.__marker_positions[E - 1] - self.__marker_positions[E - 2]) / dt1 # PRZEDostatnia prędkośc markera
 
-            # położenia markera (uproszczenie zapisu)
-            s0 = self.__marker_positions[E - 0]
-            s1 = self.__marker_positions[E - 1]
-            s2 = self.__marker_positions[E - 2]
+            # położenia sanek (uproszczenie zapisu)
+            s0 = self.__carriage_positions[E - 0]
+            s1 = self.__carriage_positions[E - 1]
+            s2 = self.__carriage_positions[E - 2]
 
             # współczynniki modelu prędkosc_markera=A * pozycja_wózka + B
-            A = (vmarker1 - vmarker0) / (s1 - s0)
-            B = vmarker1 - A * s1
+            A = (vmarker1 - vmarker0) / (s2 - s1)
+            B = vmarker1 - A * s2
 
             kp = np.abs(1.0 / A / dt0)
             ki, kd = 0, 0
             offset = np.abs(B / A)
 
-            pid_settings = PIDSettings(kp, ki, kd, offset)
+            self.__pid_settings = PIDSettings(kp, ki, kd, offset, A, B)
 
     def HasCompleteData(self) -> bool:
         return self.__has_complete_data
 
     def GetPIDSettings(self) -> PIDSettings:
         return self.__pid_settings
+
+    def GetInnerData(self) -> List:
+        return [self.__marker_positions, self.__carriage_positions, self.__timestamps]
 
 ##########################################
 ident = Object()
@@ -130,10 +139,10 @@ config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 # %% Kalibrajca:
 config.threshold_value = 60
 config.blob_size_range = [2000, 7000]
-config.marker_size_px = 67 # Szerokość markera w pikselach
+config.marker_size_px = 58 # Szerokość markera w pikselach
 #############################
 
-pid_settings = PIDSettings(6000, 70, 0, 120_000)
+pid_settings = PIDSettings(6000, 70, 0, 120_000, 0, 0)
 pid_queue = MeasurementQueue()
 
 pid = Object()
@@ -269,7 +278,9 @@ while True:
 
             pid_queue.AddMeasurement(Xposition_mm, output, now)
             if pid_queue.GetPIDSettings() is not None:
-                pid_settings = pid_queue.GetPIDSettings()
+                new_pid_settings = pid_queue.GetPIDSettings()
+                pid_settings = new_pid_settings
+                print(f"MODEL kp={pid_settings.Kp:.2f}, ki={pid_settings.Ki:.2f}, A={pid_settings.A}, B={pid_settings.B}, Offset={pid_settings.OutputOffset}")
 
             ## ------------------------
 
@@ -277,9 +288,12 @@ while True:
                 log_file_first_row = False
                 log_file.write(f"# Znacznik czasu: {log_file_timestamp}\n")
                 log_file.write(f"# Źródło: {__file__}\n")
-                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm]\n")
-            log_file_row = f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {pid.time_delta} {pid.output} {pid.integral_accumulator} {pid.set_point}\n"
-            log_file.write(log_file_row)
+                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm] pid-Kp pid-Ki pid-Kd pid-Offset pid-A pid-B\n")
+            log_file_row = ""
+            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {pid.time_delta} {pid.output} {pid.integral_accumulator} {pid.set_point} "
+            log_file_row += f"{pid_settings.Kp} {pid_settings.Ki} {pid_settings.Kd} {pid_settings.OutputOffset} {pid_settings.A} {pid_settings.B}"
+            log_file_row += f"{pid_queue.GetInnerData()}"
+            log_file.write(f"{log_file_row}\n")
             log_file.flush()
 
             print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={pid.output}; r.acc={pid.integral_accumulator:.2f}; r.sp={pid.set_point}")
