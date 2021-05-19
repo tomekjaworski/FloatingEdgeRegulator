@@ -4,16 +4,94 @@ import skimage.measure
 import subprocess, time
 import Faulhaber as FH
 import datetime, os, math
+from typing import List, Optional
 
 class Object(object):
     pass
 
+class PIDSettings:
+    Kp: float = 0
+    Ki: float = 0
+    Kd: float = 0
+    OutputOffset: float = 0
+
+    def __init__(self, kp: float, ki: float, kd: float, offset: float):
+        self.Kp = kp
+        self.Ki = ki
+        self.Kd = kd
+        self.OutputOffset = offset
+
+
+class MeasurementQueue:
+    __marker_positions = None # type: List[Optional[float]]
+    __carriage_positions = None # type: List[Optional[float]]
+    __timestamps = None # type: List[Optional[float]]
+    __capacity = 0
+    __has_complete_data = False
+
+    __pid_settings = None # type: PIDSettings
+
+    def __init__(self):
+        self.__capacity = 3
+        self.__marker_positions = [None] * self.__capacity
+        self.__carriage_positions = [None] * self.__capacity
+        self.__timestamps = [None] * self.__capacity
+
+    def AddMeasurement(self, newMarkerPosition: float, newCarriagePosition: float, newTimestamp: float):
+        E = self.__capacity - 1
+        if newMarkerPosition == self.__marker_positions[E]:
+            self.__carriage_positions[E] = newCarriagePosition
+            self.__timestamps[E] = newTimestamp
+        else:
+            for i in range(0, self.__capacity - 1):
+                self.__marker_positions[i] = self.__marker_positions[i + 1]
+                self.__carriage_positions[i] = self.__carriage_positions[i + 1]
+                self.__timestamps[i] = self.__timestamps[i + 1]
+
+            self.__marker_positions[E] = newMarkerPosition
+            self.__carriage_positions[E] = newCarriagePosition
+            self.__timestamps[E] = newTimestamp
+
+        # Sprawdź, czy można wyznaczyć parametry regulatora
+        self.__has_complete_data = all([x is not None for x in self.__marker_positions]) \
+            and all([x is not None for x in self.__carriage_positions]) \
+            and all([x is not None for x in self.__timestamps])
+
+        if self.__has_complete_data:
+            E = self.__capacity - 1
+
+            # kroki czasowe regulacji/pomiarów w [mm]
+            dt0 = np.double(self.__timestamps[E - 0] - self.__timestamps[E - 1]) # delta t dla ostatniego pomiaru
+            dt1 = np.double(self.__timestamps[E - 1] - self.__timestamps[E - 2]) # delta t dla PRZEDostatniego pomiaru
+
+            # prędkości markera w [mm/s]
+            vmarker0 = (self.__marker_positions[E - 0] - self.__marker_positions[E - 1]) / dt0 # ostatnia prędkość markera
+            vmarker1 = (self.__marker_positions[E - 1] - self.__marker_positions[E - 2]) / dt1 # PRZEDostatnia prędkośc markera
+
+            # położenia markera (uproszczenie zapisu)
+            s0 = self.__marker_positions[E - 0]
+            s1 = self.__marker_positions[E - 1]
+            s2 = self.__marker_positions[E - 2]
+
+            # współczynniki modelu prędkosc_markera=A * pozycja_wózka + B
+            A = (vmarker1 - vmarker0) / (s1 - s0)
+            B = vmarker1 - A * s1
+
+            kp = np.abs(1.0 / A / dt0)
+            ki, kd = 0, 0
+            offset = np.abs(B / A)
+
+            pid_settings = PIDSettings(kp, ki, kd, offset)
+
+    def HasCompleteData(self) -> bool:
+        return self.__has_complete_data
+
+    def GetPIDSettings(self) -> PIDSettings:
+        return self.__pid_settings
+
 ##########################################
 ident = Object()
-#ident.Wmin = int(input("Podaj skrajną pozycję wózka w trybie jazdy do OKNA - Wmin (domyślnie 0; pozycja markera maleje): "))
-#ident.Wmax = int(input("Podaj skrajną pozycję wózka w trybie jazdy do DRZWI - Wmax (domyślnie 400,000; pozycja markera rośnie): "))
 
-#ident.Wcurrent = ident.Wmin
 ident.edge_counter = 0
 ident.Tturn = 30 # Czas od ostatniego zobaczenia markera do awaryjnej zmiany kierunku
 ##########################################
@@ -55,11 +133,10 @@ config.blob_size_range = [2000, 7000]
 config.marker_size_px = 67 # Szerokość markera w pikselach
 #############################
 
-pid = Object()
-pid.Kp = 6000
-pid.Ti = 70
-pid.Td = 0
+pid_settings = PIDSettings(6000, 70, 0, 120_000)
+pid_queue = MeasurementQueue()
 
+pid = Object()
 pid.set_point = 0
 pid.error_current = 0 # uchyb aktualny [mm]
 pid.error_previous = 0 # uchyb poprzedni [mm]
@@ -180,38 +257,19 @@ while True:
             pid.integral_accumulator = pid.integral_accumulator + pid.time_delta * (pid.error_current + pid.error_previous) / 2.0
 
             # Wyznaczanie wyjścia
-            output = pid.Kp * pid.error_current
-            output = output + pid.Ti * pid.integral_accumulator
-            output = output + 120_000
+            output = pid_settings.Kp * pid.error_current
+            output = output + pid_settings.Ki * pid.integral_accumulator
+            output = output + pid_settings.OutputOffset
             output = max(min(output, pid.output_limit[1]), pid.output_limit[0])
 
             pid.error_previous = pid.error_current
             pid.output = int(output)
             FH.GoToPosition(can0, 5, pid.output)
 
-            """
-            ## ------ regulacja -------
-            # pozycja=0 - do okna
-            # pozycja=400,000 do drzwi
-            if Xposition_px > 0: # marker przesuwa się do DRZWI
-                FH.GoToPosition(can0, 5, 0)
 
-                pass
-            if Xposition_px <= 0: # marker przesuwa się do OKNA
-                FH.GoToPosition(can0, 5, 240_000)
-                pass
-            """
-            """
-    
-            if pos < 7 - 2:
-                FH.GoToPosition(can0, 5, KIERUNEK_DRZWI)
-                print(f"#REG: {KIERUNEK_DRZWI}")
-                output_value = KIERUNEK_DRZWI
-            if pos > 0.1:
-                FH.GoToPosition(can0, 5, KIERUNEK_OKNO)
-                print(f"#REG: {KIERUNEK_OKNO}")
-                output_value = KIERUNEK_OKNO
-            """
+            pid_queue.AddMeasurement(Xposition_mm, output, now)
+            if pid_queue.GetPIDSettings() is not None:
+                pid_settings = pid_queue.GetPIDSettings()
 
             ## ------------------------
 
@@ -226,25 +284,6 @@ while True:
 
             print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={pid.output}; r.acc={pid.integral_accumulator:.2f}; r.sp={pid.set_point}")
         break
-
-    # if now - ident.marker_occurrence_timestamp > ident.Tturn:
-    #     ident.marker_occurrence_timestamp = now + 60*5 # wyłącz to na minutę lub do znalezenia pierwszego markera
-    #     swap_directions = True
-    #
-    # if swap_directions:
-    #     swap_directions = False
-    #     delta, last_swap_timestamp = now - last_swap_timestamp, now
-    #
-    #     # pozycja=0 - do okna
-    #     # pozycja=400,000 do drzwi
-    #     if ident.Wcurrent == ident.Wmin:
-    #         ident.Wcurrent = ident.Wmax
-    #     else:
-    #         ident.Wcurrent = ident.Wmin
-    #
-    #     FH.GoToPosition(can0, 5, ident.Wcurrent)
-    #     ident.edge_counter += 1
-    #     print(f"#SWAP: {ident.Wcurrent}; timestamp={time.time()}; edge={ident.edge_counter}")
 
     if True or CONFIG_imshow:
         key = cv2.waitKey(1) & 0xFF
@@ -267,9 +306,9 @@ while True:
             print(f"Zapisano: {fname}")
 
 
-        if key==ord('z'):
+        if key == ord('z'):
             pid.set_point = 0
-        if key==ord('+'):
+        if key == ord('+'):
             pid.set_point = 20
 
 
