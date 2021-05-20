@@ -19,7 +19,7 @@ config.setup_blob_detection = True
 config.setup_marker_detection = True
 config.setup_dump_video = False
 config.setup_video_source = "m:\\!!BADANIA\\2020_SterowanieWstegi\\pomiary-2021-03-11\\video-20210311-153327.avi"
-config.setup_use_physical_camera = False
+config.setup_use_physical_camera = True
 
 
 ############################################################################
