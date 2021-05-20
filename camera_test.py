@@ -1,4 +1,4 @@
-import subprocess, time, datetime
+import subprocess, time, datetime, os, sys
 import cv2
 import numpy as np
 import skimage.measure
@@ -18,24 +18,30 @@ config.setup_threshold = True
 config.setup_blob_detection = True
 config.setup_marker_detection = True
 config.setup_dump_video = False
+config.setup_video_source = "m:\\!!BADANIA\\2020_SterowanieWstegi\\pomiary-2021-03-11\\video-20210311-153327.avi"
+config.setup_use_physical_camera = False
+
 
 ############################################################################
+if config.setup_use_physical_camera:
+    cap = cv2.VideoCapture(0)
+    _, _ = cap.read()
 
-output = subprocess.call(f"v4l2-ctl -d 0 -c auto_exposure=1 -c exposure_time_absolute={config.exposure_time}",
-                         shell=True)
-print(f"output=[{output}]")
-output = subprocess.call(f"v4l2-ctl -d 0 -p {config.fps}", shell=True)
-print(f"output=[{output}]")
-time.sleep(2)
-
-# Otwórz urzadzenie i wykonaj probny odczyt
-cap = cv2.VideoCapture(0)
-_, _ = cap.read()
-time.sleep(1)
+    # Ustaw czas ekspozycji oraz prędkość akwizycji
+    output = subprocess.call(f"v4l2-ctl -d 0 -c auto_exposure=1 -c exposure_time_absolute={config.exposure_time}",
+                             shell=True)
+    print(f"output=[{output}]")
+    output = subprocess.call(f"v4l2-ctl -d 0 -p {config.fps}", shell=True)
+    print(f"output=[{output}]")
+    time.sleep(1)
+else:
+    assert os.path.exists(config.setup_video_source)
+    cap = cv2.VideoCapture(config.setup_video_source)
 
 # Wyswietl pierwsza ramke (debug)
 _, frame = cap.read()
 cv2.imshow('frame', frame)
+cv2.waitKey(1)
 
 ####################
 if config.setup_dump_video:
