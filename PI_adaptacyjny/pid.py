@@ -1,5 +1,7 @@
 from typing import List, Optional
 import numpy as np
+import math
+
 
 class PIDSettings:
     Kp: float = 0
@@ -25,13 +27,13 @@ class PIDSettings:
 
 
 class MeasurementQueue:
-    __marker_positions = None # type: List[Optional[float]]
-    __carriage_positions = None # type: List[Optional[float]]
-    __timestamps = None # type: List[Optional[float]]
+    __marker_positions = None  # type: List[Optional[float]]
+    __carriage_positions = None  # type: List[Optional[float]]
+    __timestamps = None  # type: List[Optional[float]]
     __capacity = 0
     __has_complete_data = False
 
-    __pid_settings = None # type: PIDSettings
+    __pid_settings = None  # type: PIDSettings
 
     def __init__(self):
         self.__capacity = 3
@@ -57,19 +59,19 @@ class MeasurementQueue:
 
         # Sprawdź, czy można wyznaczyć parametry regulatora
         self.__has_complete_data = all([x is not None for x in self.__marker_positions]) \
-            and all([x is not None for x in self.__carriage_positions]) \
-            and all([x is not None for x in self.__timestamps])
+                                   and all([x is not None for x in self.__carriage_positions]) \
+                                   and all([x is not None for x in self.__timestamps])
 
         if self.__has_complete_data:
             E = self.__capacity - 1
 
             # kroki czasowe regulacji/pomiarów w [mm]
-            dt0 = np.double(self.__timestamps[E - 0] - self.__timestamps[E - 1]) # delta t dla ostatniego pomiaru
-            dt1 = np.double(self.__timestamps[E - 1] - self.__timestamps[E - 2]) # delta t dla PRZEDostatniego pomiaru
+            dt0 = np.double(self.__timestamps[E - 0] - self.__timestamps[E - 1])  # delta t dla ostatniego pomiaru
+            dt1 = np.double(self.__timestamps[E - 1] - self.__timestamps[E - 2])  # delta t dla PRZEDostatniego pomiaru
 
             # prędkości markera w [mm/s]
-            vmarker0 = (self.__marker_positions[E - 0] - self.__marker_positions[E - 1]) / dt0 # ostatnia prędkość markera
-            vmarker1 = (self.__marker_positions[E - 1] - self.__marker_positions[E - 2]) / dt1 # PRZEDostatnia prędkośc markera
+            vmarker0 = (self.__marker_positions[E - 0] - self.__marker_positions[E - 1]) / dt0  # ostatnia prędkość markera
+            vmarker1 = (self.__marker_positions[E - 1] - self.__marker_positions[E - 2]) / dt1  # PRZEDostatnia prędkośc markera
 
             # położenia sanek (uproszczenie zapisu)
             s0 = self.__carriage_positions[E - 0]
@@ -97,15 +99,30 @@ class MeasurementQueue:
 
 
 
+
 class PID:
     __settings: PIDSettings = None
     __setpoint: float = 0
 
     __integral_accumulator: float = 0
+    __output_limit: (float, float) = (-math.inf, math.inf)
+    __output: float = 0
 
+    __timestamp_previous: float = 0
+    __timestamp_current: float = 0
+    __time_delta: float = 0
+
+    __error_previous: float = 0
+    __error_current: float = 0
 
     def __init__(self):
         self.__settings = PIDSettings(1, 0, 0, 0, 0, 0)
+
+    def UpdateSettings(self, settings: PIDSettings):
+        self.__settings = settings
+
+    def GetCurrentSettings(self) -> PIDSettings:
+        return self.__settings
 
     def SetSetpoint(self, newSetpoint: float):
         self.__setpoint = newSetpoint
@@ -113,16 +130,41 @@ class PID:
     def GetSetpoint(self) -> float:
         return self.__setpoint
 
+    def SetOutputLimit(self, minimum: float, maximum: float):
+        self.__output_limit = (minimum, maximum)
 
-    def Run(self, inputMeasurement: float, inputTimestamp: float):
+    def Run(self, inputMeasurement: float, inputTimestamp: float) -> float:
+        self.__timestamp_previous = self.__timestamp_current
+        self.__error_previous = self.__error_current
 
-        self.error_current = self.__setpoint - inputMeasurement
-        self.time_delta = inputTimestamp - self.last_timestamp
-        self.__integral_accumulator += self.time_delta * (self.error_current + self.error_previous) / 2.0
+        self.__error_current = self.__setpoint - inputMeasurement
+        self.__timestamp_current = inputTimestamp
 
+        self.__time_delta = inputTimestamp - self.__timestamp_previous
+        self.__integral_accumulator += self.__time_delta * (self.__error_current + self.__error_previous) / 2.0
 
-        output = 0
-        output += self.__settings.Kp * self.error_current
+        diff = (self.__error_current - self.__error_previous) / self.__time_delta
+
+        output = 0.0
+        output += self.__settings.Kp * self.__error_current
         output += self.__settings.Ki * self.__integral_accumulator
-        output += self.__settings.OutputOffset .. . .. . .
-        output = max(min(output, pid.output_limit[1]), pid.output_limit[0])
+        output += self.__settings.Kd * diff
+        output += self.__settings.OutputOffset
+        output = min(output, self.__output_limit[1])
+        output = max(output, self.__output_limit[0])
+
+        self.__output = output
+
+        #
+        #
+
+        return output
+
+    def GetOutput(self)->float:
+        return self.__output
+
+    def GetTimeDelta(self)->float:
+        return self.__time_delta
+
+    def GetIntegralAccumulator(self)->float:
+        return self.__integral_accumulator

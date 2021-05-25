@@ -51,17 +51,23 @@ config.blob_size_range = [2000, 7000]
 config.marker_size_px = 58 # Szerokość markera w pikselach
 #############################
 
-pid_settings = PIDSettings(6000, 70, 0, 120_000, 0, 0)
 pid_queue = MeasurementQueue()
 
-pid = Object()
-pid.set_point = 0
-pid.error_current = 0 # uchyb aktualny [mm]
-pid.error_previous = 0 # uchyb poprzedni [mm]
-pid.time_delta = 0 # długośc okresu regulacji/obrotu taśmy [s]
-pid.integral_accumulator = 0 # akumulator całki [mm]
-pid.output_limit = [0, 400_000] # ogranicznik wyjścia
-pid.output = 0
+# pid = Object()
+# pid.set_point = 0
+# pid.error_current = 0 # uchyb aktualny [mm]
+# pid.error_previous = 0 # uchyb poprzedni [mm]
+# pid.time_delta = 0 # długośc okresu regulacji/obrotu taśmy [s]
+# pid.integral_accumulator = 0 # akumulator całki [mm]
+# pid.output_limit = [0, 400_000] # ogranicznik wyjścia
+# pid.output = 0
+
+from pid import PID
+
+REG = PID()
+REG.SetOutputLimit(0, 400_000)
+REG.UpdateSettings(PIDSettings(kp=6000, ki=70, kd=0, offset=120_000, a=0, b=0))
+
 #############################
 
 # set the ROI parameters
@@ -160,8 +166,8 @@ while True:
         output_value = -1
         if now - last_output_update > config.Tdetection:
 
-            pid.time_delta = now - marker_last_occurrence_timestamp # czas w sekundach
-            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) / pid.time_delta
+            time_delta = now - marker_last_occurrence_timestamp # czas w sekundach
+            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) /time_delta
             Xvelocities_mm = Xvelocities_mm[1:] + [Xvelocity_mm]
             Xposition_mm_prev = Xposition_mm
 
@@ -169,27 +175,18 @@ while True:
             last_output_update = now
             cv2.imshow('found', frame)
 
+
             ## ------ regulacja -------
-            pid.error_current = pid.set_point - Xposition_mm
-
-            pid.integral_accumulator = pid.integral_accumulator + pid.time_delta * (pid.error_current + pid.error_previous) / 2.0
-
-            # Wyznaczanie wyjścia
-            output = pid_settings.Kp * pid.error_current
-            output = output + pid_settings.Ki * pid.integral_accumulator
-            output = output + pid_settings.OutputOffset
-            output = max(min(output, pid.output_limit[1]), pid.output_limit[0])
-
-            pid.error_previous = pid.error_current
-            pid.output = int(output)
-            FH.GoToPosition(can0, 5, pid.output)
+            output = REG.Run(Xposition_mm, now)
+            output = int(output)
+            FH.GoToPosition(can0, 5, output)
 
 
             pid_queue.AddMeasurement(Xposition_mm, output, now)
             if pid_queue.GetPIDSettings() is not None:
                 new_pid_settings = pid_queue.GetPIDSettings()
-                pid_settings = new_pid_settings
-                print(f"MODEL kp={pid_settings.Kp:.2f}, ki={pid_settings.Ki:.2f}, A={pid_settings.A}, B={pid_settings.B}, Offset={pid_settings.OutputOffset}")
+                REG.UpdateSettings(new_pid_settings)
+                print(f"MODEL kp={new_pid_settings.Kp:.2f}, ki={new_pid_settings.Ki:.2f}, A={new_pid_settings.A}, B={new_pid_settings.B}, Offset={new_pid_settings.OutputOffset}")
 
             ## ------------------------
 
@@ -198,14 +195,16 @@ while True:
                 log_file.write(f"# Znacznik czasu: {log_file_timestamp}\n")
                 log_file.write(f"# Źródło: {__file__}\n")
                 log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm] pid-Kp pid-Ki pid-Kd pid-Offset pid-A pid-B\n")
+
+            cps = REG.GetCurrentSettings()
             log_file_row = ""
-            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {pid.time_delta} {pid.output} {pid.integral_accumulator} {pid.set_point} "
-            log_file_row += f"{pid_settings.Kp} {pid_settings.Ki} {pid_settings.Kd} {pid_settings.OutputOffset} {pid_settings.A} {pid_settings.B}"
+            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {REG.GetTimeDelta()} {REG.GetOutput()} {REG.GetIntegralAccumulator()} {REG.GetSetpoint()} "
+            log_file_row += f"{cps.Kp} {cps.Ki} {cps.Kd} {cps.OutputOffset} {cps.A} {cps.B}"
             log_file_row += f"{pid_queue.GetInnerData()}"
             log_file.write(f"{log_file_row}\n")
             log_file.flush()
 
-            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={pid.output}; r.acc={pid.integral_accumulator:.2f}; r.sp={pid.set_point}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={REG.GetOutput()}; r.acc={REG.GetIntegralAccumulator():.2f}; r.sp={REG.GetSetpoint()}")
         break
 
     if True or CONFIG_imshow:
@@ -230,9 +229,9 @@ while True:
 
 
         if key == ord('z'):
-            pid.set_point = 0
+            REG.SetSetpoint(0)
         if key == ord('+'):
-            pid.set_point = 20
+            REG.SetSetpoint(20)
 
 
 print("Koniec pracy")
