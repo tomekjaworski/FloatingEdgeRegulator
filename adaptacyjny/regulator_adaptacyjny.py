@@ -181,6 +181,7 @@ while True:
 
             if step_number == 1:
                 FH.GoToPosition(can0, 5, 240_000)
+                s[step_number] = 240_000
 
             if step_number == 2:
                 a_pomiar[step_number] = (v_pomiar[step_number] - v_pomiar[step_number - 1]) / (s[step_number - 1] - s[step_number - 2])
@@ -193,11 +194,6 @@ while True:
                 if ((abs(v_pomiar[step_number] - v_pomiar[step_number-1]) > 0.1) and
                     abs(s[step_number-1]-s[step_number-2]) > 0) and abs(eps[step_number]) > 0.5: #v nie przekraczała 0.8mm/s dla regulacji w stanie ustalonym
                     # sprawdzić jako alternatywę, metodę wyznaczania a i b na podstawie kilku ostatnich punktów pomiarowych
-                    # if step_number <= przedzial_wyzn_ab:  #+ 1:
-                    #     zakres_punktow_ab = np.arange(0,1+(step_number-1))  #1 : (k - 1);
-                    # else
-                    #     zakres_punktow_ab = (k - przedzial_wyzn_ab) : (k - 1) ;
-                    # end
                     zakres_punktow_ab = np.arange(np.max((step_number - 10, 0)), step_number)
 
                     indeks_min = np.max(np.where(s[zakres_punktow_ab]==np.min(s[zakres_punktow_ab])))
@@ -205,7 +201,7 @@ while True:
 
 
                     a_pomiar[step_number] = ((x_pomiar[indeks_max+1] - x_pomiar[indeks_max])/time_deltas[step_number] - (x_pomiar[indeks_min+1] - x_pomiar[indeks_min])/time_deltas[step_number]) / (s[indeks_max] - s[indeks_min])
-                    b_pomiar[step_number] = (x_pomiar[indeks_max+1]-x_pomiar[indeks_max])/time_deltas[step_number] - a_pomiar[k] * s[indeks_max]
+                    b_pomiar[step_number] = (x_pomiar[indeks_max+1]-x_pomiar[indeks_max])/time_deltas[step_number] - a_pomiar[step_number] * s[indeks_max]
                     podporka[step_number] = -b_pomiar[step_number]/a_pomiar[step_number]
                     v_zad = eps[step_number] / time_deltas[step_number]
                     s[step_number] = (v_zad - b_pomiar[step_number]) / a_pomiar[step_number]
@@ -236,10 +232,10 @@ while True:
                 log_file_first_row = False
                 log_file.write(f"# Znacznik czasu: {log_file_timestamp}\n")
                 log_file.write(f"# Źródło: {__file__}\n")
-                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm] \n")
+                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-output[1] \n")
 
             log_file_row = ""
-            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm}  "
+            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {output} "
             log_file.write(f"{log_file_row}\n")
             log_file.flush()
 

@@ -1,0 +1,6 @@
+# Znacznik czasu: 20210610-202026
+# Źródło: /home/pi/Desktop/FloatingEdgeRegulator/adaptacyjny/regulator_adaptacyjny.py
+# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm] 
+1623349248.252515 772 0 83.5 16.98305084745763 [0, 0, 0, 0, 0.7845765809180387]  
+1623349265.9140983 1251 0 -15.0 -3.050847457627119 [0, 0, 0, 0.7845765809180387, -1.1343272223235223]  
+1623349283.4507532 1870 0 49.0 9.966101694915254 [0, 0, 0.7845765809180387, -1.1343272223235223, 0.7422399388282994]  
