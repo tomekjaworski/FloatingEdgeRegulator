@@ -7,7 +7,6 @@ import datetime, os, math
 from typing import List, Optional
 
 from obj import Object
-from pid import PIDSettings, MeasurementQueue
 
 ##########################################
 ident = Object()
@@ -51,24 +50,6 @@ config.blob_size_range = [2000, 7000]
 config.marker_size_px = 58 # Szerokość markera w pikselach
 #############################
 
-pid_queue = MeasurementQueue()
-
-# pid = Object()
-# pid.set_point = 0
-# pid.error_current = 0 # uchyb aktualny [mm]
-# pid.error_previous = 0 # uchyb poprzedni [mm]
-# pid.time_delta = 0 # długośc okresu regulacji/obrotu taśmy [s]
-# pid.integral_accumulator = 0 # akumulator całki [mm]
-# pid.output_limit = [0, 400_000] # ogranicznik wyjścia
-# pid.output = 0
-
-from pid import PID
-
-REG = PID()
-REG.SetOutputLimit(0, 400_000)
-REG.UpdateSettings(PIDSettings(kp=6000, ki=70, kd=0, offset=120_000, a=0, b=0))
-
-#############################
 
 # set the ROI parameters
 # left = 0
@@ -122,6 +103,7 @@ podporka = np.zeros(1000)
 eps = np.zeros(1000)
 s = np.zeros(1000)
 time_deltas = np.zeros(1000)
+set_point = 0
 
 przedzial_wyzn_ab=20
 
@@ -195,7 +177,7 @@ while True:
 
             else:
                 v_pomiar[step_number] = (x_pomiar[step_number] - x_pomiar[step_number - 1]) / time_deltas[step_number]
-                eps[step_number] = REG.GetSetpoint() - x_pomiar[step_number]
+                eps[step_number] = set_point - x_pomiar[step_number]
 
             if step_number == 1:
                 FH.GoToPosition(can0, 5, 240_000)
@@ -238,22 +220,15 @@ while True:
 
 
             s[step_number] = np.min((np.max((0, s[step_number])), 400_000))
-
+            output = s[step_number]
 
             ##
             step_number += 1
 
             ## ------ regulacja -------
-            output = REG.Run(Xposition_mm, now)
             output = int(output)
             FH.GoToPosition(can0, 5, output)
 
-
-            pid_queue.AddMeasurement(Xposition_mm, output, now)
-            if pid_queue.GetPIDSettings() is not None:
-                new_pid_settings = pid_queue.GetPIDSettings()
-                REG.UpdateSettings(new_pid_settings)
-                print(f"MODEL kp={new_pid_settings.Kp:.2f}, ki={new_pid_settings.Ki:.2f}, A={new_pid_settings.A}, B={new_pid_settings.B}, Offset={new_pid_settings.OutputOffset}")
 
             ## ------------------------
 
@@ -261,17 +236,14 @@ while True:
                 log_file_first_row = False
                 log_file.write(f"# Znacznik czasu: {log_file_timestamp}\n")
                 log_file.write(f"# Źródło: {__file__}\n")
-                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm] pid-Kp pid-Ki pid-Kd pid-Offset pid-A pid-B\n")
+                log_file.write("# timestamp[s] frame# edge[1] xpos[px] xpos[mm] velocities[mm/sec] reg-timedelta[s] reg-output[1] reg-accum reg-setpoint[mm] \n")
 
-            cps = REG.GetCurrentSettings()
             log_file_row = ""
-            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm} {REG.GetTimeDelta()} {REG.GetOutput()} {REG.GetIntegralAccumulator()} {REG.GetSetpoint()} "
-            log_file_row += f"{cps.Kp} {cps.Ki} {cps.Kd} {cps.OutputOffset} {cps.A} {cps.B}"
-            log_file_row += f"{pid_queue.GetInnerData()}"
+            log_file_row += f"{time.time()} {frame_counter} {ident.edge_counter} {Xposition_px} {Xposition_mm} {Xvelocities_mm}  "
             log_file.write(f"{log_file_row}\n")
             log_file.flush()
 
-            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={REG.GetOutput()}; r.acc={REG.GetIntegralAccumulator():.2f}; r.sp={REG.GetSetpoint()}")
+            print(f"FOUND {blob.bbox_area}, found={found_counter}; Xpx={Xposition_px}; Xmm={Xposition_mm:.2f}; Xvels={Xvelocities_mm}; r.out={output}; r.sp={set_point}")
         break
 
     if True or CONFIG_imshow:
@@ -296,9 +268,9 @@ while True:
 
 
         if key == ord('z'):
-            REG.SetSetpoint(0)
+            set_point = 0
         if key == ord('+'):
-            REG.SetSetpoint(20)
+            set_point = 20
 
 
 print("Koniec pracy")
