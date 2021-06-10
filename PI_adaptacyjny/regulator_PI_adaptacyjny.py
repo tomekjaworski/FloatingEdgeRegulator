@@ -48,7 +48,7 @@ config.marker_size_mm = 12 # szerokość markera w [mm] (stała maszynowa)
 # %% Kalibrajca:
 config.threshold_value = 60
 config.blob_size_range = [2000, 7000]
-config.marker_size_px = 58 # Szerokość markera w pikselach
+config.marker_size_px = 59 # Szerokość markera w pikselach
 #############################
 
 pid_queue = MeasurementQueue()
