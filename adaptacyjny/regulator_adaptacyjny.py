@@ -113,6 +113,18 @@ Xposition_mm_prev = 0
 Xposition_px = 0
 Xvelocities_mm = [0] * 5
 
+step_number = 0
+x_pomiar = np.zeros(1000)
+v_pomiar = np.zeros(1000)
+a_pomiar = np.zeros(1000)
+b_pomiar = np.zeros(1000)
+podporka = np.zeros(1000)
+eps = np.zeros(1000)
+s = np.zeros(1000)
+time_deltas = np.zeros(1000)
+
+przedzial_wyzn_ab=20
+
 while True:
     # capture the frame
     ret, frame = cap.read()
@@ -167,7 +179,7 @@ while True:
         if now - last_output_update > config.Tdetection:
 
             time_delta = now - marker_last_occurrence_timestamp # czas w sekundach
-            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) /time_delta
+            Xvelocity_mm = (Xposition_mm - Xposition_mm_prev) / time_delta
             Xvelocities_mm = Xvelocities_mm[1:] + [Xvelocity_mm]
             Xposition_mm_prev = Xposition_mm
 
@@ -175,6 +187,61 @@ while True:
             last_output_update = now
             cv2.imshow('found', frame)
 
+            x_pomiar[step_number] = Xposition_mm
+            time_deltas[step_number] = time_delta
+            if step_number == 0:
+                # Przesunięcie wózka na pozycję 0
+                FH.GoToPosition(can0, 5, 0)
+
+            else:
+                v_pomiar[step_number] = (x_pomiar[step_number] - x_pomiar[step_number - 1]) / time_deltas[step_number]
+                eps[step_number] = REG.GetSetpoint() - x_pomiar[step_number]
+
+            if step_number == 1:
+                FH.GoToPosition(can0, 5, 240_000)
+
+            if step_number == 2:
+                a_pomiar[step_number] = (v_pomiar[step_number] - v_pomiar[step_number - 1]) / (s[step_number - 1] - s[step_number - 2])
+                b_pomiar[step_number] = v_pomiar[step_number - 1] - a_pomiar[step_number] * s[step_number - 2]
+                v_zad = eps[step_number] / time_deltas[step_number]
+                s[step_number] = (v_zad - b_pomiar[step_number]) / a_pomiar[step_number]
+                podporka[step_number] = -b_pomiar[step_number] / a_pomiar[step_number]
+
+            if step_number >= 3:
+                if ((abs(v_pomiar[step_number] - v_pomiar[step_number-1]) > 0.1) and
+                    abs(s[step_number-1]-s[step_number-2]) > 0) and abs(eps[step_number]) > 0.5: #v nie przekraczała 0.8mm/s dla regulacji w stanie ustalonym
+                    # sprawdzić jako alternatywę, metodę wyznaczania a i b na podstawie kilku ostatnich punktów pomiarowych
+                    # if step_number <= przedzial_wyzn_ab:  #+ 1:
+                    #     zakres_punktow_ab = np.arange(0,1+(step_number-1))  #1 : (k - 1);
+                    # else
+                    #     zakres_punktow_ab = (k - przedzial_wyzn_ab) : (k - 1) ;
+                    # end
+                    zakres_punktow_ab = np.arange(np.max((step_number - 10, 0)), step_number)
+
+                    indeks_min = np.max(np.where(s[zakres_punktow_ab]==np.min(s[zakres_punktow_ab])))
+                    indeks_max = np.max(np.where(s[zakres_punktow_ab] == np.max(s[zakres_punktow_ab])))
+
+
+                    a_pomiar[step_number] = ((x_pomiar[indeks_max+1] - x_pomiar[indeks_max])/time_deltas[step_number] - (x_pomiar[indeks_min+1] - x_pomiar[indeks_min])/time_deltas[step_number]) / (s[indeks_max] - s[indeks_min])
+                    b_pomiar[step_number] = (x_pomiar[indeks_max+1]-x_pomiar[indeks_max])/time_deltas[step_number] - a_pomiar[k] * s[indeks_max]
+                    podporka[step_number] = -b_pomiar[step_number]/a_pomiar[step_number]
+                    v_zad = eps[step_number] / time_deltas[step_number]
+                    s[step_number] = (v_zad - b_pomiar[step_number]) / a_pomiar[step_number]
+
+                else:
+                    #1. sprawdzić uwzględnienie w "całce" różnicy dwóch ostatnich prędkości ("całka" powinna powodować zerowanie delta_v i delta_x)
+                    #2. sprawdzić alternatywne zastosowanie sterowania PI
+                    a_pomiar[step_number] = a_pomiar[step_number-1]
+                    b_pomiar[step_number] = b_pomiar[step_number-1]
+                    podporka[step_number] = podporka[step_number-1] + 500 * eps[step_number] * time_deltas[step_number]
+                    s[step_number] = podporka[step_number]
+
+
+            s[step_number] = np.min((np.max((0, s[step_number])), 400_000))
+
+
+            ##
+            step_number += 1
 
             ## ------ regulacja -------
             output = REG.Run(Xposition_mm, now)
